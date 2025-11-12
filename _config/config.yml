@@ -1,0 +1,11 @@
+---
+Name: event-tickets-discounts
+After: 'event-tickets/*'
+---
+# XD\EventTickets\ReservationForm:
+#   extensions:
+#     - XD\EventTickets\Discounts\Extensions\AddDiscountExtension
+
+# YourTicketPageClass:
+#   extensions:
+#     - XD\EventTickets\Discounts\Extensions\DiscountEventExtension

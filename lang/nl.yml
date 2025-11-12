@@ -1,0 +1,36 @@
+nl:
+  CheckoutSteps:
+    discount: Kortingscode
+  XD\EventTickets\Discounts\Model\Discount:
+    SINGULARNAME: 'Korting'
+    PLURALNAME: 'Kortingen'
+    DiscountType_PRICE: 'Prijs'
+    DiscountType_PERCENTAGE: 'Percentage'
+    AppliesTo_CART: 'Hele winkelwagen'
+    AppliesTo_EACH_TICKET: 'Elk ticket'
+    db_Code: 'Code'
+    db_DiscountType: 'Type korting'
+    db_Amount: 'Bedrag'
+    db_AppliesTo: 'Van toepassing op'
+    db_Uses: 'Aantal'
+    db_ValidFrom: 'Geldig van'
+    db_ValidTill: 'Geldig tot'
+    db_Description: 'Omschrijving'
+    db_TicketType: 'Ticket type'
+    db_OncePerEmail: 'Een keer per e-mailadres te gebruiken'
+    many_many_Groups: 'Groepen'
+    many_many_TicketPages: 'Events'
+    CodeHelp: 'De code kan worden aangepast.'
+    DescriptionHelp: 'De omschrijving is alleen in het CMS te zien.'
+    UsesHelp: 'Zet op "-1" om de koritng ongelimiteerd te gebruiken.'
+  XD\EventTickets\Discounts\Forms\DiscountForm:
+    CouponCode: Kortingscode
+    AddDiscount: Code toevoegen
+  XD\EventTickets\Discounts\Forms\DiscountField:
+    VALIDATION_NOT_FOUND: 'De ingevulde coupon is niet gevonden'
+    VALIDATION_USED_CHECK: 'De ingevulde coupon is al gebruikt'
+    VALIDATION_DATE_CHECK: 'De coupon is verlopen'
+    VALIDATION_EVENT_CHECK: 'De coupon is niet toegestaan op dit evenement'
+    VALIDATION_MEMBER_CHECK: 'Geen van de aanwezigen mag deze coupon gebruiken'
+    VALIDATION_TICKET_TYPE_CHECK: 'De coupon is niet geldig met de gekozen producten.'
+    VALIDATION_EMAIL_CHECK: 'De ingevulde coupon is al gebruikt'

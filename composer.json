@@ -1,0 +1,25 @@
+{
+  "name": "xddesigners/silverstripe-event-tickets-discounts",
+  "description": "Discount module for SilverStripe Event Tickets",
+  "type": "silverstripe-vendormodule",
+  "homepage": "https://github.com/TheBnl/event-tickets-discounts",
+  "keywords": ["silverstripe", "ticket", "omnipay", "event", "calendar", "discount"],
+  "license": "BSD-3-Clause",
+  "authors": [
+    {
+        "name": "Remy Vaartjes",
+        "email": "remy@xd.nl"
+    }
+  ],
+  "require": {
+    "silverstripe/framework": "^4",
+    "silverstripe/cms": "^4",
+    "xddesigners/silverstripe-event-tickets": "^2",
+    "silverstripe/tagfield": "*"
+  },
+  "autoload": {
+      "psr-4": {
+          "XD\\EventTickets\\Discounts\\": "src"
+      }
+  }
+}
