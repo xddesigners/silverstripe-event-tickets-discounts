@@ -3,7 +3,7 @@
 namespace XD\EventTickets\Discounts\Extensions;
 
 use SilverStripe\Forms\CheckboxField;
-use SilverStripe\ORM\DataExtension;
+use SilverStripe\Core\Extension;
 use SilverStripe\Forms\FieldList;
 
 /**
@@ -11,7 +11,7 @@ use SilverStripe\Forms\FieldList;
  * @package XD\EventTickets\Discounts
  * @property \CalendarEvent $owner
  */
-class DiscountEventExtension extends DataExtension
+class DiscountEventExtension extends Extension
 {
     private static $db = [
         'DisableDiscountField' => 'Boolean'
