@@ -21,6 +21,7 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Security\Group;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Security\Member;
+use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\TagField\TagField;
 use SilverStripe\Forms\TextareaField;
@@ -119,7 +120,7 @@ class Discount extends PriceModifier
                 ->setSource(Group::get())
                 ->setShouldLazyLoad(true),
             TagField::create('TicketPages', $this->fieldLabel('TicketPages'))
-                ->setSource($this->ticketPages())
+                ->setSource($this->getTicketPageOptions())
                 ->setShouldLazyLoad(true),
             CheckboxSetField::create('TicketType', $this->fieldLabel('TicketType'))
                 ->setSource($this->ticketTypes())
@@ -143,7 +144,7 @@ class Discount extends PriceModifier
         return array_map(fn($class) => singleton($class)->i18n_singular_name(), $ticketTypes);
     }
 
-    public function ticketPages()
+    public function getTicketPageOptions()
     {
         $ticketPageIds = Ticket::get()->column('TicketPageID');
         $ticketPages = [];
@@ -173,8 +174,10 @@ class Discount extends PriceModifier
     {
         switch ($this->DiscountType) {
             case self::PERCENTAGE:
-                $discount = ($total / 100 * $this->Amount);
+                $percentage = max(0, min(100, (float) $this->Amount));
+                $discount = ($total / 100 * $percentage);
                 $total -= $discount;
+                $total = $total > 0 ? $total : 0;
                 break;
             default:
                 // case price
@@ -191,14 +194,40 @@ class Discount extends PriceModifier
         $this->setPriceModification($discount);
     }
 
-    public function validateOncePerEmail(Reservation $reservation)
+    public function validateOncePerEmail(Reservation $reservation, ?string $email = null)
     {
         if (!$this->OncePerEmail) {
             return true;
         }
 
-        $email = $reservation->Email;
-        return !$this->Reservations()->filter(['Email' => $email])->exists();
+        // Reservation has no Email field: the address lives on the main contact (or comes from the form being
+        // submitted). Without an address we can't check, so refuse.
+        $email = $email ?: ($reservation->MainContact()->exists() ? $reservation->MainContact()->getEmail() : null);
+        $email = strtolower(trim((string) $email));
+        if ($email === '') {
+            return false;
+        }
+
+        foreach ($this->usedReservations($reservation) as $used) {
+            $usedEmail = $used->MainContact()->exists() ? strtolower(trim((string) $used->MainContact()->getEmail())) : '';
+            if ($usedEmail === $email) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Reservations that count as a use: paid, or pending payment (not abandoned carts or failed payments).
+     */
+    public function usedReservations(?Reservation $exclude = null)
+    {
+        $list = $this->Reservations()->filter(['Status' => [Reservation::STATUS_PAID, Reservation::STATUS_PENDING]]);
+        if ($exclude && $exclude->ID) {
+            $list = $list->exclude('ID', $exclude->ID);
+        }
+        return $list;
     }
 
     public function validateTicketType(Reservation $reservation)
@@ -216,14 +245,15 @@ class Discount extends PriceModifier
      *
      * @return bool
      */
-    public function validateUses()
+    public function validateUses(?Reservation $reservation = null)
     {
-        $uses = $this->Uses;
-        if ($uses === -1) {
-            return true;
+        $uses = (int) $this->Uses;
+        if ($uses < 0) {
+            return true; // unlimited
         }
 
-        return $this->Reservations()->count() <= $uses;
+        // Strictly fewer uses than allowed (was "<=": usable Uses+1 times), counting paid/pending reservations only
+        return $this->usedReservations($reservation)->count() < $uses;
     }
 
     /**
@@ -233,18 +263,25 @@ class Discount extends PriceModifier
      */
     public function validateDate()
     {
-        $valid = true;
-        if (!empty($this->ValidFrom)) {
-            $from = $this->dbObject('ValidFrom');
-            $valid = $from->InPast();
+        $now = DBDatetime::now()->getTimestamp();
+
+        // Both bounds must hold (the till-check used to overwrite the from-check)
+        if (!empty($this->ValidFrom) && strtotime($this->ValidFrom) > $now) {
+            return false;
         }
 
         if (!empty($this->ValidTill)) {
-            $till = $this->dbObject('ValidTill');
-            $valid = $till->InFuture();
+            $till = strtotime($this->ValidTill);
+            // A date without a time means "valid through that day"
+            if (date('H:i:s', $till) === '00:00:00') {
+                $till += 86399;
+            }
+            if ($till < $now) {
+                return false;
+            }
         }
 
-        return $valid;
+        return true;
     }
 
     /**
@@ -254,7 +291,7 @@ class Discount extends PriceModifier
      *
      * @return bool
      */
-    public function validateGroups(Member $member = null)
+    public function validateGroups(?Member $member = null)
     {
         if (!$this->Groups()->exists()) {
             return true;
@@ -297,6 +334,11 @@ class Discount extends PriceModifier
      */
     public function generateCode()
     {
-        return uniqid($this->ID);
+        // Random, not time based (uniqid() codes were guessable)
+        do {
+            $code = strtoupper(bin2hex(random_bytes(5)));
+        } while (self::get()->filter('Code', $code)->exists());
+
+        return $code;
     }
 }

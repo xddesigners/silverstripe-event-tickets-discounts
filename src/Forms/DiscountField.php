@@ -42,9 +42,22 @@ class DiscountField extends TextField
             return parent::validate();
         }
 
+        // Brute-force protection: at most N wrong codes per session per window
+        if ($this->tooManyAttempts()) {
+            $result->addFieldError($this->getName(), _t(
+                __CLASS__ . '.VALIDATION_TOO_MANY',
+                'Too many attempts, please try again later'
+            ));
+
+            return $result;
+        }
+
+        $reservation = $this->form->getReservation();
+
         /** @var Discount $discount */
         // Check if the discount exists
-        if (!$discount = Discount::get()->find('Code', $this->value)) {
+        if (!$discount = Discount::get()->find('Code', trim((string) $this->value))) {
+            $this->registerFailedAttempt();
             $result->addFieldError($this->getName(), _t(
                 __CLASS__ . '.VALIDATION_NOT_FOUND',
                 'The entered coupon is not found'
@@ -54,7 +67,7 @@ class DiscountField extends TextField
         }
 
         // Check if the discount is already used
-        if (!$discount->validateUses()) {
+        if (!$discount->validateUses($reservation)) {
             $result->addFieldError($this->getName(), _t(
                 __CLASS__ . '.VALIDATION_USED_CHECK',
                 'The entered coupon is already used'
@@ -73,7 +86,6 @@ class DiscountField extends TextField
             return $result;
         }
 
-        $reservation = $this->form->getReservation();
         // Check if the coupon is allowed on this event
         if (!$discount->validateEvents($reservation->TicketPage())) {
             $result->addFieldError($this->getName(), _t(
@@ -84,7 +96,7 @@ class DiscountField extends TextField
             return $result;
         }
 
-        if (!$discount->validateOncePerEmail($reservation)) {
+        if (!$discount->validateOncePerEmail($reservation, $this->submittedMainContactEmail($reservation))) {
             $result->addFieldError($this->getName(), _t(
                 __CLASS__ . '.VALIDATION_EMAIL_CHECK',
                 'The coupon is only usable once'
@@ -126,10 +138,87 @@ class DiscountField extends TextField
             return $result;
         }
 
+        // One discount per reservation: replace any other discount instead of stacking them
+        foreach ($reservation->PriceModifiers() as $modifier) {
+            if ($modifier instanceof Discount && (int) $modifier->ID !== (int) $discount->ID) {
+                $reservation->PriceModifiers()->remove($modifier);
+            }
+        }
+
         $discount->write();
-        $this->form->getReservation()->PriceModifiers()->add($discount);
-        $this->form->getReservation()->calculateTotal();
-        $this->form->getReservation()->write();
+        $reservation->PriceModifiers()->add($discount);
+        $reservation->calculateTotal();
+        $reservation->write();
         return $result;
+    }
+
+    /**
+     * Max wrong codes per session within the window (config: max_failed_attempts / attempt_window).
+     */
+    private static $max_failed_attempts = 10;
+
+    private static $attempt_window = 900;
+
+    private function formRequest()
+    {
+        $controller = $this->form ? $this->form->getController() : null;
+        return $controller ? $controller->getRequest() : null;
+    }
+
+    private function attemptsSession()
+    {
+        $request = $this->formRequest();
+        return $request ? $request->getSession() : null;
+    }
+
+    private function recentAttempts(): array
+    {
+        $session = $this->attemptsSession();
+        $window = (int) static::config()->get('attempt_window');
+        $now = time();
+        $attempts = $session ? (array) $session->get('DiscountFieldAttempts') : [];
+        return array_values(array_filter($attempts, fn($t) => is_int($t) && $t > $now - $window));
+    }
+
+    private function tooManyAttempts(): bool
+    {
+        return count($this->recentAttempts()) >= (int) static::config()->get('max_failed_attempts');
+    }
+
+    private function registerFailedAttempt(): void
+    {
+        if ($session = $this->attemptsSession()) {
+            $attempts = $this->recentAttempts();
+            $attempts[] = time();
+            $session->set('DiscountFieldAttempts', $attempts);
+        }
+    }
+
+    /**
+     * The main contact's email from the form being submitted (the reservation's main contact is only set after
+     * this validation), falling back to the stored main contact.
+     */
+    private function submittedMainContactEmail($reservation): ?string
+    {
+        $request = $this->formRequest();
+        $posted = $request ? $request->postVar('Attendee') : null;
+        if (is_array($posted)) {
+            $emailFieldIDs = $reservation->TicketPage()->Fields()->filter('Name', 'Email')->column('ID');
+            foreach ($posted as $attendeeID => $values) {
+                if (!is_array($values) || empty($values['Main'])) {
+                    continue;
+                }
+                foreach ($emailFieldIDs as $fieldID) {
+                    if (isset($values[$fieldID])) {
+                        $value = is_array($values[$fieldID]) ? reset($values[$fieldID]) : $values[$fieldID];
+                        if (is_string($value) && $value !== '') {
+                            return $value;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $reservation->MainContact()->exists() ? $reservation->MainContact()->getEmail() : null;
     }
 }
